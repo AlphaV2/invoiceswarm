@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Upload, CheckCircle, Loader2, Zap, Copy, Download, Table as TableIcon, Code, RefreshCw, X, Lock, FileText, Plus, FileSpreadsheet, ArrowRight } from 'lucide-react';
-// REMOVED: import { extractInvoiceData } from '../services/geminiService'; (No longer needed)
+import { Upload, CheckCircle, Zap, Copy, RefreshCw, Lock, Plus, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+// IMPORT THE NEW ADVANCED LOCAL OCR SERVICE
+import { scanInvoiceLocal } from '../services/customOCR'; 
 import { ExtractedData, ProcessingStatus, UserProfile } from '../types';
 import { incrementUsage, addToHistory, incrementBulkUsage, upgradeUser } from '../services/storageService';
 
@@ -22,11 +23,11 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
     const files: File[] = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // BULK UPLOAD LIMIT CHECK FOR FREE USERS
+    // BULK UPLOAD LIMIT CHECK
     if (files.length > 1 && !user.isPro) {
         if (!incrementBulkUsage()) {
              setShowPaywall(true);
-             if (fileInputRef.current) fileInputRef.current.value = ''; // Reset input
+             if (fileInputRef.current) fileInputRef.current.value = ''; 
              return;
         }
     }
@@ -38,48 +39,51 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
     }
 
     setStatus(ProcessingStatus.PROCESSING);
-    setResults([]); // Clear previous
+    setResults([]); 
     setErrorMessage('');
 
     const newResults: ExtractedData[] = [];
     let errorOccurred = false;
 
-    // Process Sequentially for Demo Stability (Simulate Bulk)
+    // Process Sequentially
     for (const file of files) {
-        if (file.size > 5 * 1024 * 1024) {
-            setErrorMessage(`File ${file.name} is too large (>5MB). Skipped.`);
+        // Increased limit to 10MB since processing is local
+        if (file.size > 10 * 1024 * 1024) { 
+            setErrorMessage(`File ${file.name} is too large (>10MB). Skipped.`);
             errorOccurred = true;
             continue; 
         }
 
         try {
-            const base64 = await fileToBase64(file);
-            
-            // --- UPDATED: Call Vercel Serverless Function instead of Client-Side Service ---
-            const response = await fetch('/api/invoice', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    imageBase64: base64,
-                    prompt: `Extract invoice data as a JSON object with these exact keys: 
-                             vendorName, vendorGstin, vendorAddress, invoiceNumber, invoiceDate, 
-                             totalAmount, taxAmount, cgst, sgst, igst, currency, 
-                             lineItems (array with description, quantity, amount). 
-                             Do not use Markdown formatting.`
-                })
-            });
+            // --- NEW ADVANCED OCR CALL ---
+            // This runs Image Enhancement -> Tesseract -> Smart Regex Parsing
+            const ocrResult = await scanInvoiceLocal(file);
 
-            if (!response.ok) throw new Error("Server processing failed");
+            // Determine status based on confidence
+            const confidenceScore = ocrResult.confidence || 0;
+            let noteString = `Confidence: ${confidenceScore.toFixed(0)}%`;
+            if (confidenceScore < 60) noteString += " (Low Quality Image)";
 
-            const apiData = await response.json();
-            // Clean up Markdown if Gemini sends it (e.g. ```json ... ```)
-            const cleanJson = apiData.text.replace(/```json|```/g, '').trim();
-            const extracted = JSON.parse(cleanJson);
-            // --- END UPDATE ---
+            const extracted: ExtractedData = {
+                vendorName: "Scanned Vendor", // Regex cannot reliably extract names without AI
+                vendorGstin: ocrResult.vendorGstin || "",
+                vendorAddress: "",
+                invoiceNumber: ocrResult.invoiceNumber || "", 
+                invoiceDate: ocrResult.invoiceDate || "",
+                totalAmount: ocrResult.totalAmount || "0.00",
+                taxAmount: "0.00",
+                cgst: "0.00",
+                sgst: "0.00",
+                igst: "0.00",
+                currency: "₹",
+                lineItems: [], // Local OCR cannot extract tables cleanly
+                notes: noteString
+            };
+            // --- END NEW LOGIC ---
 
             if(extracted) {
                 newResults.push(extracted);
-                incrementUsage(); // Deduct credits per file
+                incrementUsage(); 
                 addToHistory({
                     id: Date.now().toString() + Math.random(),
                     date: new Date().toISOString(),
@@ -92,13 +96,12 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
                 });
             }
         } catch (err: any) {
-            console.error(err);
-            setErrorMessage(err.message || "Failed to process one or more invoices.");
+            console.error("OCR Error:", err);
+            setErrorMessage("Failed to read image. Please ensure it's a clear photo of a document.");
             errorOccurred = true;
         }
     }
 
-    // Reset input immediately so user can select again later
     if (fileInputRef.current) {
         fileInputRef.current.value = '';
     }
@@ -110,18 +113,6 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
     } else {
         setStatus(ProcessingStatus.ERROR);
     }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-      return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => {
-              const res = reader.result as string;
-              resolve(res.split(',')[1]);
-          };
-          reader.onerror = error => reject(error);
-      });
   };
 
   const triggerUpload = () => {
@@ -140,7 +131,6 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
   };
 
   const handlePayAsYouGo = () => {
-      // Simulate Payment
       setTimeout(() => {
           upgradeUser('PAYG');
           setShowPaywall(false);
@@ -151,36 +141,18 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
   const downloadCSV = () => {
     if (results.length === 0) return;
     
-    // CSV Header
     const headers = [
-        "Vendor Name", 
-        "Vendor GSTIN",
-        "Invoice Number", 
-        "Date", 
-        "Total Amount", 
-        "Tax Amount", 
-        "CGST", 
-        "SGST", 
-        "IGST", 
-        "Line Items Count"
+        "Vendor GSTIN", "Invoice Number", "Date", "Total Amount", "Confidence Score"
     ];
 
-    // CSV Rows
     const rows = results.map(r => {
-        // Escape quotes
         const escape = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
-        
         return [
-            escape(r.vendorName || ''),
             escape(r.vendorGstin || ''),
             escape(r.invoiceNumber || ''),
             escape(r.invoiceDate || ''),
             escape(r.totalAmount || '0'),
-            escape(r.taxAmount || '0'),
-            escape(r.cgst || '0'),
-            escape(r.sgst || '0'),
-            escape(r.igst || '0'),
-            r.lineItems?.length || 0
+            escape(r.notes || '')
         ].join(',');
     });
 
@@ -226,10 +198,10 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-trust-50 dark:bg-trust-900/30 text-trust-700 dark:text-trust-300 text-xs font-semibold uppercase tracking-wide mb-4 shadow-sm border border-trust-100 dark:border-trust-800">
-            <Zap size={14} className="fill-current" /> Free OCR Tool
+            <Zap size={14} className="fill-current" /> Free & Private OCR
           </div>
           <h2 className="text-3xl md:text-5xl font-bold text-slate-900 dark:text-white mb-6">
-            Upload Invoices. <span className="text-transparent bg-clip-text bg-gradient-to-r from-trust-600 to-sky-600">Get Data Instantly.</span>
+            Upload Invoices. <span className="text-transparent bg-clip-text bg-gradient-to-r from-trust-600 to-sky-600">Get Data Locally.</span>
           </h2>
            {!user.isPro && (
             <p className="text-sm font-medium text-slate-500">
@@ -252,14 +224,8 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
                         <Upload size={32} className="text-trust-600" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Drop invoices here to scan</h3>
-                    <p className="text-slate-500 mb-6">Supports Bulk Upload (Max 3 files for free users)</p>
+                    <p className="text-slate-500 mb-6">100% Client-Side. Your data never leaves this browser.</p>
                     <button className="px-6 py-3 bg-trust-600 text-white font-bold rounded-full shadow-lg hover:shadow-trust-500/25">Select Files</button>
-                    
-                    <div className="mt-8 flex flex-wrap justify-center gap-4 md:gap-8 text-sm text-slate-400 font-medium">
-                        <span className="flex items-center gap-1.5"><CheckCircle size={16} className="text-green-500"/> Bulk Upload</span>
-                        <span className="flex items-center gap-1.5"><CheckCircle size={16} className="text-green-500"/> Export to Excel/CSV</span>
-                        <span className="flex items-center gap-1.5"><CheckCircle size={16} className="text-green-500"/> High Accuracy</span>
-                    </div>
                 </div>
             )}
 
@@ -271,8 +237,8 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
                           <div className="absolute inset-0 border-4 border-trust-600 rounded-full border-t-transparent animate-spin"></div>
                           <Zap size={32} className="absolute inset-0 m-auto text-trust-600 animate-pulse" fill="currentColor"/>
                     </div>
-                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white animate-pulse">Analyzing Invoices...</h3>
-                    <p className="text-slate-500 mt-2">Extracting GSTIN, Tax, and Line Items with AI</p>
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white animate-pulse">Analyzing...</h3>
+                    <p className="text-slate-500 mt-2">Enhancing Image • Running OCR • Parsing Data</p>
                 </div>
             )}
 
@@ -293,8 +259,8 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
                                         onClick={() => setActiveResultIndex(idx)}
                                         className={`p-4 cursor-pointer border-b border-slate-100 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-800 transition ${idx === activeResultIndex ? 'bg-white dark:bg-slate-800 border-l-4 border-l-trust-600' : ''}`}
                                     >
-                                        <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{res.vendorName || "Unknown Vendor"}</p>
-                                        <p className="text-xs text-slate-500">{res.invoiceNumber} • {res.totalAmount}</p>
+                                        <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{res.vendorName}</p>
+                                        <p className="text-xs text-slate-500">{res.invoiceNumber || 'No ID'} • {res.totalAmount}</p>
                                     </div>
                                 ))}
                             </div>
@@ -312,7 +278,7 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
                         <div className="w-2/3 p-6 bg-white dark:bg-slate-800">
                              {errorMessage && (
                                 <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-200 text-sm rounded-lg flex items-center gap-2">
-                                    <Zap size={16}/> {errorMessage}
+                                    <AlertTriangle size={16}/> {errorMessage}
                                 </div>
                              )}
                              {currentData && (
@@ -321,7 +287,7 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
                                          <div>
                                              <p className="text-xs font-bold text-slate-400 uppercase">Vendor</p>
                                              <h3 className="text-xl font-bold text-slate-900 dark:text-white">{currentData.vendorName}</h3>
-                                             <p className="text-sm text-slate-500">{currentData.vendorAddress}</p>
+                                             <p className="text-sm text-slate-500 italic">{currentData.notes}</p>
                                          </div>
                                          <div className="text-right">
                                              <p className="text-xs font-bold text-slate-400 uppercase">Total</p>
@@ -332,15 +298,15 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
                                      <div className="grid grid-cols-3 gap-4 mb-6">
                                          <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                                              <p className="text-xs text-slate-500">Invoice No</p>
-                                             <p className="font-mono font-semibold">{currentData.invoiceNumber}</p>
+                                             <p className="font-mono font-semibold">{currentData.invoiceNumber || <span className="text-slate-400 italic">Not found</span>}</p>
                                          </div>
                                          <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                                              <p className="text-xs text-slate-500">Date</p>
-                                             <p className="font-mono font-semibold">{currentData.invoiceDate}</p>
+                                             <p className="font-mono font-semibold">{currentData.invoiceDate || <span className="text-slate-400 italic">Not found</span>}</p>
                                          </div>
                                          <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                                              <p className="text-xs text-slate-500">GSTIN</p>
-                                             <p className="font-mono font-semibold">{currentData.vendorGstin}</p>
+                                             <p className="font-mono font-semibold">{currentData.vendorGstin || <span className="text-slate-400 italic">Not found</span>}</p>
                                          </div>
                                      </div>
 
@@ -355,13 +321,15 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
                                                  </tr>
                                              </thead>
                                              <tbody>
-                                                 {currentData.lineItems?.map((item, i) => (
-                                                     <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
-                                                         <td className="p-2 truncate max-w-[150px]">{item.description}</td>
-                                                         <td className="p-2 text-right">{item.quantity}</td>
-                                                         <td className="p-2 text-right font-medium">{item.amount}</td>
-                                                     </tr>
-                                                 ))}
+                                                 <tr>
+                                                     <td colSpan={3} className="p-8 text-center text-slate-400">
+                                                         <div className="flex flex-col items-center gap-2">
+                                                            <Lock size={20} className="text-slate-300"/>
+                                                            <p>Line Item Extraction is disabled in Local Mode.</p>
+                                                            <p className="text-xs">Only available via Cloud AI API.</p>
+                                                         </div>
+                                                     </td>
+                                                 </tr>
                                              </tbody>
                                          </table>
                                      </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Features from './components/Features';
-import DemoSection from './components/DemoSection';
+// import DemoSection from './components/DemoSection'; // HIDDEN FOR NOW
 import InvoiceGenerator from './components/InvoiceGenerator';
 import Dashboard from './components/Dashboard';
 import Footer from './components/Footer';
@@ -11,7 +11,7 @@ import HSNFinder from './components/HSNFinder';
 import ContactForm from './components/ContactForm';
 import { getUser, loginUser } from './services/storageService';
 import { UserProfile } from './types';
-import { FileText, Scan, Zap } from 'lucide-react';
+import { FileText } from 'lucide-react'; // Removed 'Scan' since we hid that button
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState('home');
@@ -94,9 +94,14 @@ const App: React.FC = () => {
         {currentPage === 'home' && (
             <>
                 <Hero onLogin={handleMagicLogin} user={currentUser} onNavigate={handleNavigate} />
+                
                 <div id="generator"><InvoiceGenerator /></div>
-                <div id="demo"><DemoSection user={currentUser} /></div>
+                
+                {/* OCR SECTION HIDDEN */}
+                {/* <div id="demo"><DemoSection user={currentUser} /></div> */}
+                
                 <Features />
+                
                 {/* Floating Action Buttons */}
                 <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-3 animate-fade-in-up">
                     <button 
@@ -106,8 +111,10 @@ const App: React.FC = () => {
                         <div className="p-1.5 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-600">
                              <FileText size={18} />
                         </div>
-                        <span className="text-sm">Invoice Generator</span>
+                        <span className="text-sm">Create Invoice</span>
                     </button>
+                    
+                    {/* OCR BUTTON HIDDEN
                     <button 
                         onClick={() => document.getElementById('demo')?.scrollIntoView({behavior: 'smooth'})}
                         className="flex items-center gap-2 px-5 py-3 bg-trust-600 text-white font-bold rounded-full shadow-xl shadow-trust-600/30 hover:scale-105 transition-transform"
@@ -116,7 +123,8 @@ const App: React.FC = () => {
                             <Scan size={18} />
                         </div>
                         <span className="text-sm">OCR Scanner</span>
-                    </button>
+                    </button> 
+                    */}
                 </div>
             </>
         )}

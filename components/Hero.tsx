@@ -86,12 +86,12 @@ const Hero: React.FC<{onLogin: (email: string) => void, user: any, onNavigate: a
                 >
                     <FileText size={22} /> Generate Invoice Now
                 </button>
-                <button 
+                {/* <button 
                     onClick={() => document.getElementById('demo')?.scrollIntoView({behavior: 'smooth'})}
                     className="px-8 py-4 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center justify-center gap-2 text-lg w-full sm:w-auto"
                 >
                     Try OCR Demo
-                </button>
+                </button> */}
             </div>
 
             {/* Proof Strip */}

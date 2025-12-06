@@ -83,7 +83,7 @@ const Navbar: React.FC<NavbarProps> = ({ isDark, toggleTheme, onNavigate, user }
                             HSN Code Finder
                         </button>
                         <button onClick={() => handleLinkClick('home', 'demo')} className="block w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 border-l-4 border-transparent hover:border-trust-500">
-                            Bulk Invoice OCR
+                            Bulk Invoice OCR(Coming Soon)
                         </button>
                         
                         <div className="border-t border-slate-100 dark:border-slate-700 mt-2 bg-slate-50 dark:bg-slate-900/50">
