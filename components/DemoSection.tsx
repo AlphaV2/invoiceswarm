@@ -1,7 +1,6 @@
-
 import React, { useState, useRef } from 'react';
 import { Upload, CheckCircle, Loader2, Zap, Copy, Download, Table as TableIcon, Code, RefreshCw, X, Lock, FileText, Plus, FileSpreadsheet, ArrowRight } from 'lucide-react';
-import { extractInvoiceData } from '../services/geminiService';
+// REMOVED: import { extractInvoiceData } from '../services/geminiService'; (No longer needed)
 import { ExtractedData, ProcessingStatus, UserProfile } from '../types';
 import { incrementUsage, addToHistory, incrementBulkUsage, upgradeUser } from '../services/storageService';
 
@@ -55,7 +54,29 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
 
         try {
             const base64 = await fileToBase64(file);
-            const extracted = await extractInvoiceData(base64);
+            
+            // --- UPDATED: Call Vercel Serverless Function instead of Client-Side Service ---
+            const response = await fetch('/api/invoice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    imageBase64: base64,
+                    prompt: `Extract invoice data as a JSON object with these exact keys: 
+                             vendorName, vendorGstin, vendorAddress, invoiceNumber, invoiceDate, 
+                             totalAmount, taxAmount, cgst, sgst, igst, currency, 
+                             lineItems (array with description, quantity, amount). 
+                             Do not use Markdown formatting.`
+                })
+            });
+
+            if (!response.ok) throw new Error("Server processing failed");
+
+            const apiData = await response.json();
+            // Clean up Markdown if Gemini sends it (e.g. ```json ... ```)
+            const cleanJson = apiData.text.replace(/```json|```/g, '').trim();
+            const extracted = JSON.parse(cleanJson);
+            // --- END UPDATE ---
+
             if(extracted) {
                 newResults.push(extracted);
                 incrementUsage(); // Deduct credits per file
@@ -246,9 +267,9 @@ const DemoSection: React.FC<DemoSectionProps> = ({ user }) => {
             {(status === ProcessingStatus.PROCESSING || status === ProcessingStatus.UPLOADING) && (
                 <div className="bg-white dark:bg-slate-800 rounded-3xl p-16 text-center shadow-xl border border-slate-200 dark:border-slate-700">
                     <div className="relative w-24 h-24 mx-auto mb-6">
-                         <div className="absolute inset-0 border-4 border-trust-100 dark:border-slate-700 rounded-full"></div>
-                         <div className="absolute inset-0 border-4 border-trust-600 rounded-full border-t-transparent animate-spin"></div>
-                         <Zap size={32} className="absolute inset-0 m-auto text-trust-600 animate-pulse" fill="currentColor"/>
+                          <div className="absolute inset-0 border-4 border-trust-100 dark:border-slate-700 rounded-full"></div>
+                          <div className="absolute inset-0 border-4 border-trust-600 rounded-full border-t-transparent animate-spin"></div>
+                          <Zap size={32} className="absolute inset-0 m-auto text-trust-600 animate-pulse" fill="currentColor"/>
                     </div>
                     <h3 className="text-2xl font-bold text-slate-900 dark:text-white animate-pulse">Analyzing Invoices...</h3>
                     <p className="text-slate-500 mt-2">Extracting GSTIN, Tax, and Line Items with AI</p>
