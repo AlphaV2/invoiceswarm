@@ -1,0 +1,5 @@
+{
+  "name": "InvoiceSnap",
+  "description": "AI-powered invoice OCR extraction tool. Converts PDF/Images to structured CSV/JSON data instantly.",
+  "requestFramePermissions": []
+}
