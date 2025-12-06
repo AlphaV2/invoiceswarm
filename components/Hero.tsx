@@ -1,7 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Check, ShieldCheck, Clock, FileText, Sparkles, Loader2, Users, Bell, Lock } from 'lucide-react';
-import { getUser } from '../services/storageService';
+import { Check, ShieldCheck, Clock, FileText, Sparkles, Loader2, Lock } from 'lucide-react';
 
 const Hero: React.FC<{onLogin: (email: string) => void, user: any, onNavigate: any}> = ({ onLogin, user, onNavigate }) => {
   const [email, setEmail] = useState('');
@@ -17,19 +15,36 @@ const Hero: React.FC<{onLogin: (email: string) => void, user: any, onNavigate: a
     return () => clearInterval(interval);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // --- THIS IS THE FIXED SECTION ---
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
     
     setLoading(true);
-    // Simulate Magic Link / Waitlist Joining
-    setTimeout(() => {
+
+    try {
+        // 1. Send data to the Vercel/Upstash backend
+        const response = await fetch('/api/waitlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+
+        // 2. Handle the result
+        if (response.ok) {
+            setSubmitted(true);
+            setEmail(''); 
+        } else {
+            alert("Something went wrong. Please try again.");
+        }
+    } catch (error) {
+        console.error("Waitlist error:", error);
+        alert("Connection failed. Please check your internet.");
+    } finally {
         setLoading(false);
-        setSubmitted(true);
-        // If user is new, we could trigger login, but for waitlist we just show success
-        // onLogin(email); 
-    }, 1500);
+    }
   };
+  // --------------------------------
 
   return (
     <section className="relative pt-28 pb-12 lg:pt-36 lg:pb-24 overflow-hidden selection:bg-trust-500 selection:text-white">
