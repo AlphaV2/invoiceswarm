@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
     },
     plugins: [react()],
-    // REMOVED THE 'define' BLOCK TO PROTECT KEY
+    // REMOVED THE 'define' BLOCK TO PROTECT  KEY
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
